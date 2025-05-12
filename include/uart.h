@@ -1,4 +1,4 @@
 #include <stdint.h>
 
 int uart_setup(void);
-uint8_t uart_available(uint8_t *p);
+void uart_main_loop(uint8_t (*callback)(uint8_t *buffer), int buff_len);

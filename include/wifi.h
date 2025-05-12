@@ -7,4 +7,5 @@
 #define WIFI_PSK  "MyPasswd"
 
 int wifi_setup(void);
-int tcp_client(void (*callback)(uint8_t *buffer));
+int tcp_setup(void);
+void tcp_main_loop(uint8_t (*callback)(uint8_t *buffer), int buff_len);

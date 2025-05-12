@@ -1,13 +1,8 @@
 #include "camera_comm.h"
 #include "wifi.h"
 
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/wifi_mgmt.h>
-#include <zephyr/net/net_mgmt.h>
-#include <zephyr/net/net_ip.h>
-#include <zephyr/net/net_config.h>
 #include <zephyr/net/socket.h>
-#include <zephyr/net/tls_credentials.h>
+#include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_DECLARE(main);
@@ -48,10 +43,9 @@ int wifi_setup(void)
 	return 0;
 }
 
-int tcp_client(void (*callback)(uint8_t *buffer))
+int tcp_setup()
 {
 	struct sockaddr_in addr;
-	char buf[256];
 
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
@@ -69,13 +63,19 @@ int tcp_client(void (*callback)(uint8_t *buffer))
 		LOG_ERR("Connection to Server Failed.");
 		return -1;
 	}
+
 	LOG_INF("Connected to %s:%d!.", SERVER_IP, SERVER_PORT);
+	return 0;
+}
+
+void tcp_main_loop(uint8_t (*callback)(uint8_t *buffer), int buff_len)
+{
+	uint8_t recv_buffer[256] = {0};
 
 	while (1) {
-		int len = recv(sock, buf, sizeof(buf) - 1, 0);
+		int len = recv(sock, recv_buffer, sizeof(recv_buffer) - 1, 0);
 		if (len > 0) {
-			buf[len] = '\0';
-			callback(buf);
+			callback(recv_buffer);
 		} else if (len == 0) {
 			LOG_ERR("Server closed the connection.");
 			break;
@@ -87,6 +87,4 @@ int tcp_client(void (*callback)(uint8_t *buffer))
 
 	close(sock);
 	LOG_INF("Disconnected.");
-
-	return 0;
 }

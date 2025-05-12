@@ -45,6 +45,18 @@ int uart_setup(void)
 	return 0;
 }
 
+void uart_main_loop(uint8_t (*callback)(uint8_t *buffer), int buff_len)
+{
+	uint8_t recv_buffer[256] = {0};
+
+	while (1) {
+		if (!uart_available(recv_buffer)) {
+			callback(recv_buffer);
+		}
+		k_msleep(1);
+	}
+}
+
 static char rx_buf[MSG_SIZE];
 static int rx_buf_pos;
 

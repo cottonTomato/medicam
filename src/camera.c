@@ -10,7 +10,6 @@ LOG_MODULE_DECLARE(main);
 
 #define RESET_CAMERA             0XFF
 #define SET_PICTURE_RESOLUTION   0X01
-#define SET_VIDEO_RESOLUTION     0X02
 #define SET_BRIGHTNESS           0X03
 #define SET_CONTRAST             0X04
 #define SET_SATURATION           0X05
@@ -26,7 +25,6 @@ LOG_MODULE_DECLARE(main);
 #define TAKE_PICTURE             0X10
 #define SET_SHARPNESS            0X11
 #define DEBUG_WRITE_REGISTER     0X12
-#define STOP_STREAM              0X21
 #define GET_FRM_VER_INFO         0X30
 #define GET_SDK_VER_INFO         0X40
 #define SET_IMAGE_QUALITY        0X50
@@ -34,9 +32,6 @@ LOG_MODULE_DECLARE(main);
 
 const struct device *video;
 struct video_buffer *vbuf;
-
-volatile uint8_t preview_on;
-volatile uint8_t capture_flag;
 
 const uint32_t pixel_format_table[] = {
 	VIDEO_PIX_FMT_JPEG,
@@ -113,45 +108,6 @@ int camera_take_picture(void)
 	return 0;
 }
 
-void camera_video_preview(void)
-{
-	int err;
-	enum video_frame_fragmented_status f_status;
-
-	if (!preview_on) {
-		return;
-	}
-
-	err = video_dequeue(video, VIDEO_EP_OUT, &vbuf, K_FOREVER);
-	if (err) {
-		LOG_ERR("Unable to dequeue video buf");
-		return;
-	}
-
-	f_status = vbuf->flags;
-
-	if (capture_flag == 1) {
-		capture_flag = 0;
-		head_and_tail[2] = 0x01;
-		camera_buffer_send(&head_and_tail[0], 3);
-		camera_buffer_send((uint8_t *)&vbuf->bytesframe, 4);
-		camera_char_send(((current_resolution & 0x0f) << 4) | 0x01);
-	}
-
-	camera_buffer_send(vbuf->buffer, vbuf->bytesused);
-
-	if (f_status == VIDEO_BUF_EOF) {
-		camera_buffer_send(&head_and_tail[3], 2);
-		capture_flag = 1;
-	}
-
-	err = video_enqueue(video, VIDEO_EP_OUT, vbuf);
-	if (err) {
-		LOG_ERR("Unable to requeue video buf");
-		return;
-	}
-}
-
 int camera_report_info(void)
 {
 	char str_buf[400];
@@ -202,14 +158,6 @@ uint8_t camera_recv_process(uint8_t *buff)
 			take_picture_fmt = buff[1];
 		}
 		break;
-	case SET_VIDEO_RESOLUTION:
-		if (preview_on == 0) {
-			camera_set_resolution(buff[1] | 0x10);
-			video_stream_start(video);
-			capture_flag = 1;
-		}
-		preview_on = 1;
-		break;
 	case SET_BRIGHTNESS:
 		video_set_ctrl(video, VIDEO_CID_CAMERA_BRIGHTNESS, &buff[1]);
 		break;
@@ -231,6 +179,7 @@ uint8_t camera_recv_process(uint8_t *buff)
 	case SET_EXPOSURE_GAIN_ENABLE:
 		video_set_ctrl(video, VIDEO_CID_CAMERA_EXPOSURE_AUTO, &buff[1]);
 		video_set_ctrl(video, VIDEO_CID_CAMERA_GAIN_AUTO, &buff[1]);
+		break;
 	case SET_WHITE_BALANCE_ENABLE:
 		video_set_ctrl(video, VIDEO_CID_CAMERA_WHITE_BAL_AUTO, &buff[1]);
 		break;
@@ -253,14 +202,6 @@ uint8_t camera_recv_process(uint8_t *buff)
 		camera_take_picture();
 		video_stream_stop(video);
 		break;
-	case STOP_STREAM:
-		if (preview_on) {
-			camera_buffer_send(&head_and_tail[3], 2);
-			video_stream_stop(video);
-			camera_set_resolution(take_picture_fmt);
-		}
-		preview_on = 0;
-		break;
 	case RESET_CAMERA:
 		video_set_ctrl(video, VIDEO_CID_ARDUCAM_RESET, NULL);
 		break;
@@ -273,22 +214,17 @@ uint8_t camera_recv_process(uint8_t *buff)
 	default:
 		break;
 	}
-
 	return buff[0];
 }
-
 int camera_setup(void)
 {
 	struct video_buffer *buffers[3];
 	int i = 0;
-
 	video = DEVICE_DT_GET(DT_NODELABEL(arducam_mega0));
-
 	if (!device_is_ready(video)) {
 		LOG_ERR("Video device %s not ready.", video->name);
 		return -1;
 	}
-
 	for (i = 0; i < ARRAY_SIZE(buffers); i++) {
 		buffers[i] = video_buffer_alloc(1024);
 		if (buffers[i] == NULL) {
@@ -297,9 +233,7 @@ int camera_setup(void)
 		}
 		video_enqueue(video, VIDEO_EP_OUT, buffers[i]);
 	}
-
 	LOG_INF("Mega start");
 	LOG_INF("- Device name: %s\n", video->name);
-
 	return 0;
 }

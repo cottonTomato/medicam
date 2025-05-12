@@ -3,9 +3,17 @@
  */
 
 #include "camera.h"
+
+#ifdef USE_UART
+
 #include "uart.h"
 
-#include <zephyr/kernel.h>
+#elif defined(USE_WIFI)
+
+#include "wifi.h"
+
+#endif
+
 #include <zephyr/logging/log.h>
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
@@ -13,22 +21,35 @@ LOG_MODULE_REGISTER(main);
 
 int main(void)
 {
-	uint8_t recv_buffer[12] = {0};
+	int buff_len = 256;
+	if (camera_setup() < 0) {
+		return -1;
+	}
+
+#ifdef USE_UART
 
 	if (uart_setup() < 0) {
 		return -1;
 	}
 
-	if (camera_setup() < 0) {
+	uart_main_loop(camera_recv_process, buff_len);
+
+#elif defined(USE_WIFI)
+
+	if (wifi_setup() < 0) {
 		return -1;
 	}
 
+	if (tcp_setup() < 0) {
+		return -1;
+	}
+
+	tcp_main_loop(camera_recv_process, buff_len);
+
+#endif
+
+	// Infinite Loop
 	while (1) {
-		if (!uart_available(recv_buffer)) {
-			camera_recv_process(recv_buffer);
-		}
-		camera_video_preview();
-		k_msleep(1);
 	}
 
 	return 0;
