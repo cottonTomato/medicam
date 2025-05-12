@@ -6,5 +6,13 @@ set(BOARD disco_l475_iot1)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(medicam)
 
-file(GLOB app_sources src/*.c)
-target_sources(app PRIVATE ${app_sources})
+# file(GLOB app_sources src/*.c)
+target_sources(
+    app
+    PRIVATE
+        # ${app_sources}
+        src/main.c
+        src/camera.c
+        src/uart.c
+)
+target_include_directories(app PRIVATE include)
